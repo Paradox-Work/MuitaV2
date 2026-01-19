@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #162131;
+  --dark: #263040;
+  --primary: #d1d5db;
+  --secondary: #94a3b8;
+  --highlight: #fb70a9;
+}
+
+body {
+  background: var(--background);
+  color: var(--primary);
+}
+h1, h2, h3 {
+  @apply font-bold text-white;
+}
+h1 {
+  font-size: 2rem;
+}
+h2 {
+  font-size: 1.5rem;
+}
+h3 {
+  font-size: 1.2rem;
+}
+button {
+  font-size: 1rem;
+  background: var(--highlight);
+  @apply font-semibold rounded px-2 py-1 text-white;
+}
+input {
+  font-size: 1rem;
+  background: var(--dark);
+  @apply rounded py-2 px-3;
+}
+
+/* navbar & main content */
+nav {
+  @apply max-w-full;
+
+  h1 {
+    @apply mb-2;
+  }
+  a {
+    color: var(--secondary);
+    @apply font-semibold mr-4;
+  }
+  a.active {
+    color: var(--highlight);
+  }
+  div {
+    @apply max-w-7xl m-auto p-4;
+  }
+  border-bottom: 1px solid var(--dark);
+}
+main {
+  @apply max-w-7xl p-4 m-auto;
+}
+.search {
+  @apply mb-7 mt-4 w-96 mx-auto block;
+}
+
+/* book list page */
+header {
+  @apply my-7;
+}
+.list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+
+  li {
+    background: var(--dark);
+    @apply rounded p-4 gap-4;
+  }
+  p {
+    @apply my-1;
+  }
+  button {
+    @apply float-end;
+  }
+}
+
+/* create page */
+.create form {
+  @apply max-w-md m-auto;
+
+  button {
+    @apply mt-6 py-2 px-3;
+  }
+}
+.field {
+  @apply my-4 grid gap-4;
+}
+.field input {
+  @apply grow;
+}
+.error {
+  color: var(--highlight);
+}
