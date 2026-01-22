@@ -41,40 +41,71 @@
                         </select>
                     </div>
                     
+                    <!-- Replace the Declarant and Consignee selects with: -->
+
                     <div class="mb-3">
                         <label class="form-label">Declarant (Your Company) *</label>
-                        <select name="declarant_id" class="form-control" required>
-                            <option value="">Select Declarant</option>
-                            @foreach($parties as $party)
-                            <option value="{{ $party->id }}">{{ $party->name }} ({{ $party->reg_code }})</option>
-                            @endforeach
-                        </select>
+                        <div class="input-group">
+                            <select name="declarant_id" class="form-control" required id="declarantSelect">
+                                <option value="">Select Declarant</option>
+                                @foreach($parties as $party)
+                                <option value="{{ $party->id }}">
+                                    {{ $party->name }} - {{ $party->type }} ({{ $party->country }})
+                                </option>
+                                @endforeach
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#newPartyModal">
+                                +
+                            </button>
+                        </div>
+                        <small class="text-muted">Select existing party or create new</small>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label class="form-label">Consignee (Receiver)</label>
-                        <select name="consignee_id" class="form-control">
+                        <select name="consignee_id" class="form-control" id="consigneeSelect">
                             <option value="">Select Consignee</option>
                             @foreach($parties as $party)
-                            <option value="{{ $party->id }}">{{ $party->name }}</option>
+                            <option value="{{ $party->id }}">
+                                {{ $party->name }} - {{ $party->type }} ({{ $party->country }})
+                            </option>
                             @endforeach
                         </select>
+                        <small class="text-muted">Optional - who receives the shipment</small>
                     </div>
-                </div>
                 
                 <div class="col-md-6">
-                    <div class="mb-3">
-                        <label class="form-label">Origin Country *</label>
-                        <input type="text" name="origin_country" class="form-control" 
-                               placeholder="LV" maxlength="2" required>
-                        <small class="text-muted">2-letter country code</small>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Destination Country *</label>
-                        <input type="text" name="destination_country" class="form-control" 
-                               placeholder="LT" maxlength="2" required>
-                    </div>
+                   <div class="mb-3">
+    <label class="form-label">Origin Country *</label>
+    <select name="origin_country" class="form-control" required>
+        <option value="">Select Country</option>
+        <option value="LV">Latvia (LV)</option>
+        <option value="LT">Lithuania (LT)</option>
+        <option value="EE">Estonia (EE)</option>
+        <option value="PL">Poland (PL)</option>
+        <option value="DE">Germany (DE)</option>
+        <option value="RU">Russia (RU)</option>
+        <option value="BY">Belarus (BY)</option>
+        <option value="FI">Finland (FI)</option>
+        <option value="SE">Sweden (SE)</option>
+    </select>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Destination Country *</label>
+    <select name="destination_country" class="form-control" required>
+        <option value="">Select Country</option>
+        <option value="LV">Latvia (LV)</option>
+        <option value="LT">Lithuania (LT)</option>
+        <option value="EE">Estonia (EE)</option>
+        <option value="PL">Poland (PL)</option>
+        <option value="DE">Germany (DE)</option>
+        <option value="RU">Russia (RU)</option>
+        <option value="BY">Belarus (BY)</option>
+        <option value="FI">Finland (FI)</option>
+        <option value="SE">Sweden (SE)</option>
+    </select>
+</div>
                     
                     <div class="mb-3">
                         <label class="form-label">Priority</label>

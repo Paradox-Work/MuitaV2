@@ -54,7 +54,7 @@
                 <a href="/inspector/inspections" class="btn btn-primary">My Inspections</a>
             @elseif($user_role === 'broker')
                 <a href="/broker/my-cases" class="btn btn-primary">My Cases</a>
-                <a href="#" class="btn btn-success">New Declaration</a>
+                <a href="/broker/new-case" class="btn btn-success">New Declaration</a>
             @elseif($user_role === 'analyst')
                 <a href="/analyst/reports" class="btn btn-primary">View Reports</a>
             @endif

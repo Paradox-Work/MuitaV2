@@ -41,8 +41,25 @@
                             </small>
                         </div>
                         <div class="btn-group">
-                            <button class="btn btn-sm btn-outline-primary">View</button>
-                            <button class="btn btn-sm btn-outline-danger">Delete</button>
+                                    @if(session('success'))
+                                <div class="alert alert-success alert-dismissible fade show">
+                                    {{ session('success') }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            @endif
+
+                            @if(session('error'))
+                                <div class="alert alert-danger alert-dismissible fade show">
+                                    {{ session('error') }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            @endif
+                            <form method="POST" action="/broker/document/{{ $doc->id }}" class="d-inline" 
+                            onsubmit="return confirm('Delete this document?')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -60,25 +77,54 @@
         @endif
     </div>
     
-    <!-- Upload Modal (static for now) -->
-    <div class="modal fade" id="uploadModal" tabindex="-1">
-        <div class="modal-dialog">
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="POST" action="/broker/case/{{ $case->id }}/documents">
+            @csrf
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Upload Document</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Document upload functionality would be implemented here.</p>
-                    <p>For demo purposes, this shows where file uploads would go.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Document Name</label>
+                        <input type="text" name="filename" class="form-control" 
+                               placeholder="invoice.pdf" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Category</label>
+                        <select name="category" class="form-control">
+                            <option value="invoice">Invoice</option>
+                            <option value="waybill">Waybill</option>
+                            <option value="certificate">Certificate</option>
+                            <option value="license">License</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Document Type</label>
+                        <select name="mime_type" class="form-control">
+                            <option value="application/pdf">PDF</option>
+                            <option value="image/jpeg">JPEG Image</option>
+                            <option value="image/png">PNG Image</option>
+                            <option value="application/msword">Word Document</option>
+                            <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">Word (DOCX)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Pages</label>
+                        <input type="number" name="pages" class="form-control" value="1" min="1">
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary">Upload</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload Document</button>
                 </div>
             </div>
-        </div>
+        </form>
     </div>
+</div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>

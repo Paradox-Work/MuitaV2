@@ -182,8 +182,8 @@ Route::get('/broker/new-case', function () {
         return redirect('/login-demo');
     }
     
-    // Get parties for dropdown
-    $parties = \App\Models\Party::where('type', 'broker')->get();
+    // Get ALL parties (not just type="broker")
+    $parties = \App\Models\Party::all();
     $vehicles = \App\Models\Vehicle::limit(50)->get();
     
     return view('broker.new-case', [
@@ -247,15 +247,40 @@ Route::get('/debug-data', function () {
     ];
 });
 
-Route::get('/broker/case/{caseId}/documents', function ($caseId) {
+// Add these routes for document operations
+Route::post('/broker/case/{id}/documents', function (Request $request, $id) {
     if (!session('user_email') || session('user_role') !== 'broker') {
         return redirect('/login-demo');
     }
     
-    $case = \App\Models\Cases::with('documents')->find($caseId);
+    // Simulate document upload (in real app, handle file upload)
+    $doc = \App\Models\Document::create([
+        'id' => 'doc-' . uniqid(),
+        'case_id' => $id,
+        'filename' => $request->filename ?? 'document.pdf',
+        'mime_type' => $request->mime_type ?? 'application/pdf',
+        'category' => $request->category ?? 'invoice',
+        'pages' => $request->pages ?? 1,
+        'uploaded_by' => session('user_name')
+    ]);
     
-    return view('broker.documents', ['case' => $case]);
+    return back()->with('success', 'Document uploaded successfully!');
 });
+
+Route::delete('/broker/document/{id}', function ($id) {
+    if (!session('user_email') || session('user_role') !== 'broker') {
+        return redirect('/login-demo');
+    }
+    
+    $doc = \App\Models\Document::find($id);
+    if ($doc) {
+        $doc->delete();
+        return back()->with('success', 'Document deleted!');
+    }
+    
+    return back()->with('error', 'Document not found');
+});
+
 
 // Add route
 Route::get('/broker/case/{id}', function ($id) {
@@ -278,4 +303,13 @@ Route::get('/broker/case/{id}/documents', function ($id) {
     $case = \App\Models\Cases::with('documents')->findOrFail($id);
     
     return view('broker.documents', ['case' => $case]);
+});
+
+Route::get('/debug-parties', function () {
+    return [
+        'all_parties' => \App\Models\Party::all(),
+        'broker_parties' => \App\Models\Party::where('type', 'broker')->get(),
+        'consignee_parties' => \App\Models\Party::where('type', 'consignee')->orWhere('type', 'receiver')->get(),
+        'total_count' => \App\Models\Party::count()
+    ];
 });
