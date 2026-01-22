@@ -22,16 +22,13 @@
                         <p class="text-2xl">{{ \Spatie\Permission\Models\Role::count() }}</p>
                     </div>
                 </div>
-                
+                  @if($user_role === 'admin')
                 <div class="mt-6">
-                    <h3 class="text-lg font-semibold mb-3">Quick Actions</h3>
-                    <a href="/admin/users" class="bg-blue-600 text-white px-4 py-2 rounded-md mr-2 hover:bg-blue-700">
-                        Manage Users
-                    </a>
-                    <a href="/admin/cases" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">
-                        View All Cases
-                    </a>
+                    <h3 class="text-lg font-semibold mb-3">Quick Actions</h3>               
+                    <a href="/admin/cases" class="btn btn-primary">View All Cases</a>
+                    <a href="/admin/users" class="btn btn-secondary">System Users (API)</a>
                 </div>
+                @endif
             </div>
         </div>
     </div>

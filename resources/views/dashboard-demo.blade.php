@@ -43,6 +43,24 @@
             </div>
         @endif
         
+        <!-- ADD THIS SECTION FOR QUICK ACTIONS -->
+        <div class="mt-4">
+            <h3>Quick Actions:</h3>
+            
+            @if($user_role === 'admin')
+                <a href="/admin/cases" class="btn btn-primary">View All Cases</a>
+                <a href="/admin/users" class="btn btn-secondary">Manage Users</a>
+            @elseif($user_role === 'inspector')
+                <a href="/inspector/inspections" class="btn btn-primary">My Inspections</a>
+            @elseif($user_role === 'broker')
+                <a href="/broker/my-cases" class="btn btn-primary">My Cases</a>
+                <a href="#" class="btn btn-success">New Declaration</a>
+            @elseif($user_role === 'analyst')
+                <a href="/analyst/reports" class="btn btn-primary">View Reports</a>
+            @endif
+        </div>
+        
+        <!-- Keep your existing role features list -->
         <div class="mt-4">
             <h3>Role-based Features:</h3>
             <ul>
@@ -65,6 +83,21 @@
                 @endif
             </ul>
         </div>
+        
+        <!-- Keep Spatie info section -->
+        @if($db_user)
+            <div class="alert alert-info mt-3">
+                <h5>✅ Database User with Spatie Roles</h5>
+                <p>User ID: {{ $db_user->id }}</p>
+                <p>Roles: {{ $db_user->getRoleNames()->implode(', ') }}</p>
+                <p>Permissions: {{ $permissions->implode(', ') }}</p>
+            </div>
+        @else
+            <div class="alert alert-warning mt-3">
+                <h5>⚠️ Session-based Demo User</h5>
+                <p>Using temporary session data. <a href="/login-db">Switch to database login</a></p>
+            </div>
+        @endif
     </div>
 </body>
 </html>
