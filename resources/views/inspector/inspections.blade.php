@@ -79,7 +79,6 @@
                     <div class="card-body text-center">
                         <h5 class="card-title text-danger">Risk Cases</h5>
                         <p class="display-6">{{ $stats['high_risk'] }}</p>
-                        <small class="text-muted">Cases with risk flags</small>
                     </div>
                 </div>
             </div>
@@ -140,9 +139,28 @@
                                         • {{ $case->arrival_ts ? $case->arrival_ts->format('Y-m-d H:i') : 'N/A' }}
                                     </p>
                                 </div>
-                                @if($riskLabel)
-                                    <span class="badge bg-{{ $riskClass == 'risk-high' ? 'danger' : ($riskClass == 'risk-medium' ? 'warning' : 'success') }}">
-                                        {{ $riskLabel }}
+                                <!-- In the case card section, replace the risk badge: -->
+                                @if($case->risk_flags)
+                                    @php
+                                        $riskLevel = $case->risk_level; // Uses the accessor
+                                        $riskScore = $case->risk_score;
+                                        $riskColors = [
+                                            'high' => 'danger',
+                                            'medium' => 'warning', 
+                                            'low' => 'info',
+                                            'none' => 'secondary'
+                                        ];
+                                        $riskIcons = [
+                                            'high' => '⚠️🔥',
+                                            'medium' => '⚠️',
+                                            'low' => '📊',
+                                            'none' => '✅'
+                                        ];
+                                    @endphp
+                                    <span class="badge bg-{{ $riskColors[$riskLevel] }}" 
+                                        data-bs-toggle="tooltip" 
+                                        title="Risk Score: {{ $riskScore }}/10 - Flags: {{ implode(', ', $case->risk_flags) }}">
+                                        {{ $riskIcons[$riskLevel] }} {{ strtoupper($riskLevel) }} RISK
                                     </span>
                                 @endif
                             </div>

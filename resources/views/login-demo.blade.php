@@ -1,44 +1,43 @@
-Route::post('/login-demo', function (\Illuminate\Http\Request $request) {
-    $request->validate([
-        'email' => 'required|email',
-        'password' => 'required'
-    ]);
-
-    // Try database authentication first
-    if (\Auth::attempt($request->only('email', 'password'))) {
-        $user = \Auth::user();
-        
-        // Store in session
-        session([
-            'user_id' => $user->id,
-            'user_email' => $user->email,
-            'user_name' => $user->name,
-            'user_role' => $user->getRoleNames()->first() ?? 'user'
-        ]);
-        
-        return redirect('/dashboard-demo');
-    }
-    
-    // Fallback to hardcoded demo accounts
-    $demoUsers = [
-        'admin@demo.com' => ['name' => 'Admin User', 'role' => 'admin', 'password' => 'admin123'],
-        'inspector@demo.com' => ['name' => 'Inspector', 'role' => 'inspector', 'password' => 'insp123'],
-        'broker@demo.com' => ['name' => 'Broker', 'role' => 'broker', 'password' => 'broker123'],
-        'analyst@demo.com' => ['name' => 'Analyst', 'role' => 'analyst', 'password' => 'analyst123'],
-    ];
-    
-    $email = $request->input('email');
-    $password = $request->input('password');
-    
-    if (isset($demoUsers[$email]) && $demoUsers[$email]['password'] === $password) {
-        session([
-            'user_email' => $email,
-            'user_name' => $demoUsers[$email]['name'],
-            'user_role' => $demoUsers[$email]['role']
-        ]);
-        
-        return redirect('/dashboard-demo');
-    }
-    
-    return back()->with('error', 'Invalid credentials');
-});
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Demo Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-4">
+                <h2 class="text-center mb-4">Demo Login</h2>
+                
+                @if(session('error'))
+                    <div class="alert alert-danger">{{ session('error') }}</div>
+                @endif
+                
+                <form method="POST" action="/login-demo">
+                    @csrf
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                </form>
+                
+                <div class="mt-4">
+                    <h6>Demo Accounts:</h6>
+                    <small class="text-muted">
+                        admin@demo.com / admin123 (Admin)<br>
+                        inspector@demo.com / insp123 (Inspector)<br>
+                        broker@demo.com / broker123 (Broker)<br>
+                        analyst@demo.com / analyst123 (Analyst)
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

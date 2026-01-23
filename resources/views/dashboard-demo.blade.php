@@ -90,7 +90,7 @@
                 <h5>✅ Database User with Spatie Roles</h5>
                 <p>User ID: {{ $db_user->id }}</p>
                 <p>Roles: {{ $db_user->getRoleNames()->implode(', ') }}</p>
-                <p>Permissions: {{ $permissions->implode(', ') }}</p>
+
             </div>
         @else
             <div class="alert alert-warning mt-3">

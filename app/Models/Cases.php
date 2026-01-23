@@ -20,7 +20,9 @@ class Cases extends Model
         'arrival_ts' => 'datetime'
     ];
     
-    // FIXED: Remove the stray # and add opening brace
+    // Add these accessors (computed properties)
+    protected $appends = ['risk_level', 'risk_score', 'is_high_risk'];
+    
     public function vehicle() {
         return $this->belongsTo(Vehicle::class, 'vehicle_id');
     }
@@ -39,5 +41,58 @@ class Cases extends Model
 
     public function inspections() {
         return $this->hasMany(Inspection::class, 'case_id');
+    }
+    
+    /**
+     * Calculate risk level based on flags
+     */
+    public function getRiskLevelAttribute()
+    {
+        if (!$this->risk_flags || !is_array($this->risk_flags)) {
+            return 'none';
+        }
+        
+        $count = count($this->risk_flags);
+        
+        if ($count >= 3) {
+            return 'high';
+        } elseif ($count == 2) {
+            return 'medium';
+        } elseif ($count == 1) {
+            return 'low';
+        }
+        
+        return 'none';
+    }
+    
+    /**
+     * Get risk score (1-10)
+     */
+    public function getRiskScoreAttribute()
+    {
+        if (!$this->risk_flags) {
+            return 1;
+        }
+        
+        $baseScore = count($this->risk_flags) * 2;
+        $score = min($baseScore, 10); // Max score 10
+        
+        // Add bonus for specific high-risk flags
+        $highRiskFlags = ['suspicious_history', 'drug_related', 'weapons', 'sanctions'];
+        foreach ($this->risk_flags as $flag) {
+            if (in_array($flag, $highRiskFlags)) {
+                $score += 2;
+            }
+        }
+        
+        return min($score, 10);
+    }
+    
+    /**
+     * Check if high risk
+     */
+    public function getIsHighRiskAttribute()
+    {
+        return $this->risk_level === 'high' || $this->risk_score >= 7;
     }
 }

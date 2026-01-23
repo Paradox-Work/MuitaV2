@@ -38,9 +38,6 @@
                     </small>
                 </div>
                 
-                <div class="mt-3 text-center">
-                    <a href="/login-demo" class="btn btn-outline-secondary btn-sm">Use Session Demo Instead</a>
-                </div>
             </div>
         </div>
     </div>

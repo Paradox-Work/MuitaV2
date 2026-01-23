@@ -4,6 +4,36 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Models\User;
+// Helper functions for SQLite compatibility
+function calculateAvgInspectionTime() {
+    $inspections = \App\Models\Inspection::whereNotNull('completed_at')
+                    ->whereNotNull('started_at')
+                    ->get();
+    
+    if ($inspections->isEmpty()) {
+        return 0;
+    }
+    
+    $totalMinutes = 0;
+    $count = 0;
+    
+    foreach ($inspections as $inspection) {
+        if ($inspection->started_at && $inspection->completed_at) {
+            $totalMinutes += $inspection->started_at->diffInMinutes($inspection->completed_at);
+            $count++;
+        }
+    }
+    
+    return $count > 0 ? round($totalMinutes / $count) : 0;
+}
+
+function calculatePassRate() {
+    $totalCompleted = \App\Models\Inspection::whereNotNull('completed_at')->count();
+    $passed = \App\Models\Inspection::where('result', 'passed')->count();
+    
+    return $totalCompleted > 0 ? round(($passed / $totalCompleted) * 100, 1) : 0;
+}
+
 
 // Public welcome page
 Route::get('/', function () {
@@ -148,6 +178,105 @@ Route::get('/admin/users', function () {
     }
     
     return view('admin.users');
+});
+
+// Add to routes/web.php
+Route::get('/admin/dashboard', function () {
+    if (!session('user_email') || session('user_role') !== 'admin') {
+        return redirect('/login-demo');
+    }
+    
+    // System statistics
+    $stats = [
+        'total_users' => \App\Models\User::count(),
+        'total_cases' => \App\Models\Cases::count(),
+        'total_inspections' => \App\Models\Inspection::count(),
+        'active_inspectors' => \App\Models\SystemUser::where('role', 'inspector')->where('active', true)->count(),
+        'pending_cases' => \App\Models\Cases::where('status', 'new')->count(),
+        'inspections_today' => \App\Models\Inspection::whereDate('created_at', today())->count(),
+        'released_today' => \App\Models\Cases::where('status', 'released')->whereDate('updated_at', today())->count(),
+        'high_risk_cases' => \App\Models\Cases::whereJsonContains('risk_flags', 'high')->count(),
+    ];
+    
+    // Recent activity
+    $recentCases = \App\Models\Cases::with(['vehicle', 'declarant'])
+        ->latest()
+        ->take(10)
+        ->get();
+    
+    $recentUsers = \App\Models\User::latest()
+        ->take(5)
+        ->get();
+    
+    return view('admin.dashboard', [
+        'stats' => $stats,
+        'recentCases' => $recentCases,
+        'recentUsers' => $recentUsers
+    ]);
+});
+
+// Add to routes/web.php
+Route::get('/admin/users', function () {
+    if (!session('user_email') || session('user_role') !== 'admin') {
+        return redirect('/login-demo');
+    }
+    
+    $users = \App\Models\User::with('roles')->latest()->get();
+    $systemUsers = \App\Models\SystemUser::all();
+    
+    return view('admin.users', [
+        'users' => $users,
+        'systemUsers' => $systemUsers
+    ]);
+});
+
+Route::get('/admin/users/create', function () {
+    if (!session('user_email') || session('user_role') !== 'admin') {
+        return redirect('/login-demo');
+    }
+    
+    $roles = \Spatie\Permission\Models\Role::all();
+    
+    return view('admin.create-user', ['roles' => $roles]);
+});
+
+Route::post('/admin/users', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'admin') {
+        return redirect('/login-demo');
+    }
+    
+    $request->validate([
+        'name' => 'required|string|max:255',
+        'email' => 'required|email|unique:users',
+        'password' => 'required|min:8',
+        'role' => 'required|exists:roles,name'
+    ]);
+    
+    $user = \App\Models\User::create([
+        'name' => $request->name,
+        'email' => $request->email,
+        'password' => Hash::make($request->password)
+    ]);
+    
+    $user->assignRole($request->role);
+    
+    return redirect('/admin/users')->with('success', 'User created successfully!');
+});
+
+Route::delete('/admin/users/{id}', function ($id) {
+    if (!session('user_email') || session('user_role') !== 'admin') {
+        return redirect('/login-demo');
+    }
+    
+    // Prevent deleting yourself
+    if ($id == session('user_id')) {
+        return back()->with('error', 'Cannot delete your own account');
+    }
+    
+    $user = \App\Models\User::findOrFail($id);
+    $user->delete();
+    
+    return back()->with('success', 'User deleted successfully!');
 });
 
 Route::get('/inspector/inspections', function (Request $request) {
@@ -449,19 +578,571 @@ Route::post('/broker/new-case', function (Request $request) {
     return redirect('/broker/my-cases')->with('success', 'Case ' . $case->id . ' created successfully!');
 });
 
-Route::get('/analyst/reports', function () {
+Route::get('/analyst/reports', function (Request $request) {
     if (!session('user_email') || session('user_role') !== 'analyst') {
         return redirect('/login-demo');
     }
     
+    $period = $request->get('period', 'today');
+    
+    // Calculate dates based on period
+    $startDate = now()->startOfDay();
+    $endDate = now()->endOfDay();
+    
+    if ($period === 'week') {
+        $startDate = now()->startOfWeek();
+        $endDate = now()->endOfWeek();
+    } elseif ($period === 'month') {
+        $startDate = now()->startOfMonth();
+        $endDate = now()->endOfMonth();
+    } elseif ($period === 'year') {
+        $startDate = now()->startOfYear();
+        $endDate = now()->endOfYear();
+    }
+    
+    // Get stats
     $stats = [
         'total_cases' => \App\Models\Cases::count(),
+        'cases_today' => \App\Models\Cases::whereDate('created_at', today())->count(),
         'pending_inspections' => \App\Models\Cases::where('status', 'in_inspection')->count(),
-        'high_risk_cases' => \App\Models\Cases::whereJsonContains('risk_flags', 'high')->count(),
-        'completed_today' => \App\Models\Inspection::whereDate('completed_at', today())->count()
+        'inspections_today' => \App\Models\Inspection::whereDate('started_at', today())->count(),
+        'released_today' => \App\Models\Cases::where('status', 'released')
+            ->whereDate('updated_at', today())->count(),
+        'pass_rate' => \App\Models\Inspection::where('result', 'passed')->count() > 0 ?
+            (\App\Models\Inspection::where('result', 'passed')->count() / 
+             \App\Models\Inspection::whereNotNull('result')->count() * 100) : 0,
+        'avg_inspection_time' => \App\Models\Inspection::avg('inspection_duration') ?? 45,
+        'high_risk_cases' => \App\Models\Cases::whereNotNull('risk_flags')
+            ->where(function($query) {
+                $query->whereJsonContains('risk_flags', 'high_financial')
+                      ->orWhereJsonContains('risk_flags', 'high_security');
+            })->count(),
+        'medium_risk_cases' => \App\Models\Cases::whereNotNull('risk_flags')
+            ->where(function($query) {
+                $query->whereJsonContains('risk_flags', 'medium')
+                      ->orWhereJsonContains('risk_flags', 'compliance');
+            })->count(),
+        'low_risk_cases' => \App\Models\Cases::whereNotNull('risk_flags')
+            ->whereJsonContains('risk_flags', 'low')
+            ->orWhereJsonContains('risk_flags', 'routine')
+            ->count(),
+        'top_origin_countries' => \App\Models\Cases::select('origin_country', \DB::raw('count(*) as total'))
+            ->groupBy('origin_country')
+            ->orderBy('total', 'desc')
+            ->limit(5)
+            ->get()
     ];
     
-    return view('analyst.reports', ['stats' => $stats]);
+    return view('analyst.reports', [
+        'stats' => $stats,
+        'period' => $period,
+        'startDate' => $startDate,
+        'endDate' => $endDate
+    ]);
+});
+
+// Add to routes
+Route::get('/analyst/risk-analysis', function () {
+    if (!session('user_email') || !in_array(session('user_role'), ['analyst', 'admin'])) {
+        return redirect('/login-demo');
+    }
+    
+    $cases = \App\Models\Cases::with(['vehicle', 'inspections'])->get();
+    
+    $riskAnalysis = [
+        'by_level' => [
+            'high' => $cases->where('risk_level', 'high')->count(),
+            'medium' => $cases->where('risk_level', 'medium')->count(),
+            'low' => $cases->where('risk_level', 'low')->count(),
+            'none' => $cases->where('risk_level', 'none')->count(),
+        ],
+        'by_status' => [],
+        'common_flags' => [],
+        'high_risk_cases' => $cases->where('is_high_risk', true)->take(10)
+    ];
+    
+    // Count flags
+    $flagCounts = [];
+    foreach ($cases as $case) {
+        if ($case->risk_flags) {
+            foreach ($case->risk_flags as $flag) {
+                $flagCounts[$flag] = ($flagCounts[$flag] ?? 0) + 1;
+            }
+        }
+    }
+    arsort($flagCounts);
+    $riskAnalysis['common_flags'] = array_slice($flagCounts, 0, 10, true);
+    
+    return view('analyst.risk-analysis', [
+        'analysis' => $riskAnalysis,
+        'total_cases' => $cases->count()
+    ]);
+});
+
+// Replace the /analyst/reports route (around line 505-550) with this:
+
+Route::get('/analyst/reports', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    // Get period filter
+    $period = $request->get('period', 'today');
+    $now = now();
+    
+    switch ($period) {
+        case 'week':
+            $startDate = $now->startOfWeek();
+            $endDate = $now->endOfWeek();
+            break;
+        case 'month':
+            $startDate = $now->startOfMonth();
+            $endDate = $now->endOfMonth();
+            break;
+        case 'year':
+            $startDate = $now->startOfYear();
+            $endDate = $now->endOfYear();
+            break;
+        default: // today
+            $startDate = $now->startOfDay();
+            $endDate = $now->endOfDay();
+    }
+    
+    // Calculate REAL statistics
+    $totalCases = \App\Models\Cases::count();
+    
+    // Count cases by risk flags - based on YOUR actual risk flag values
+    $highRiskCases = \App\Models\Cases::where(function($query) {
+        // Check for ANY risk flag that indicates high risk
+        $query->whereJsonContains('risk_flags', 'high_financial')
+              ->orWhereJsonContains('risk_flags', 'high_security')
+              ->orWhereJsonContains('risk_flags', 'high_value')
+              ->orWhereJsonContains('risk_flags', 'VALUE_ANOMALY')
+              ->orWhereJsonContains('risk_flags', 'restricted_goods');
+    })->get();
+    
+    $mediumRiskCases = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'suspicious_docs')
+              ->orWhereJsonContains('risk_flags', 'unusual_routing')
+              ->orWhereJsonContains('risk_flags', 'new_declarant');
+    })->get();
+    
+    $lowRiskCases = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'routine')
+              ->orWhereJsonContains('risk_flags', 'compliance');
+    })->get();
+    
+    // Get cases with ANY risk flags
+    $casesWithRiskFlags = \App\Models\Cases::whereNotNull('risk_flags')->get();
+    
+    // Get top origin countries
+    $topOriginCountries = \App\Models\Cases::select('origin_country', \DB::raw('count(*) as total'))
+        ->groupBy('origin_country')
+        ->orderBy('total', 'desc')
+        ->limit(5)
+        ->get();
+    
+    // Inspection statistics
+    $pendingInspections = \App\Models\Cases::where('status', 'in_inspection')->count();
+    $inspectionsToday = \App\Models\Inspection::whereDate('started_at', today())->count();
+    $releasedToday = \App\Models\Cases::where('status', 'released')
+        ->whereDate('updated_at', today())
+        ->count();
+    
+    // Calculate pass rate from inspections
+    $totalInspections = \App\Models\Inspection::whereNotNull('result')->count();
+    $passedInspections = \App\Models\Inspection::where('result', 'passed')->count();
+    $passRate = $totalInspections > 0 ? ($passedInspections / $totalInspections * 100) : 0;
+    
+    // Calculate average inspection time (in minutes) - SQLite compatible
+    $avgInspectionTime = 45; // Default fallback
+    
+    try {
+        // Try to calculate for inspections with both dates
+        $inspections = \App\Models\Inspection::whereNotNull('completed_at')
+            ->whereNotNull('started_at')
+            ->get();
+        
+        if ($inspections->count() > 0) {
+            $totalMinutes = 0;
+            foreach ($inspections as $inspection) {
+                $minutes = $inspection->started_at->diffInMinutes($inspection->completed_at);
+                $totalMinutes += $minutes;
+            }
+            $avgInspectionTime = round($totalMinutes / $inspections->count());
+        }
+    } catch (\Exception $e) {
+        // Fallback to default
+        $avgInspectionTime = 45;
+    }
+    
+    $stats = [
+        'total_cases' => $totalCases,
+        'cases_today' => \App\Models\Cases::whereDate('created_at', today())->count(),
+        'pending_inspections' => $pendingInspections,
+        'inspections_today' => $inspectionsToday,
+        'released_today' => $releasedToday,
+        'pass_rate' => $passRate,
+        'avg_inspection_time' => $avgInspectionTime,
+        'high_risk_cases' => $highRiskCases->count(),
+        'medium_risk_cases' => $mediumRiskCases->count(),
+        'low_risk_cases' => $lowRiskCases->count(),
+        'top_origin_countries' => $topOriginCountries,
+    ];
+    
+    return view('analyst.reports', [
+        'stats' => $stats,
+        'highRiskCases' => $highRiskCases,
+        'period' => $period,
+        'startDate' => $startDate,
+        'endDate' => $endDate
+    ]);
+});
+
+// Add these helper functions at the TOP of your routes file, after the use statements:
+
+
+// Risk Matrix View - Fixed for SQLite
+Route::get('/analyst/risk-matrix', function () {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    // Get actual risk flag counts from YOUR data
+    $riskFlagCounts = [
+        'high_financial' => \App\Models\Cases::whereJsonContains('risk_flags', 'high_financial')->count(),
+        'high_security' => \App\Models\Cases::whereJsonContains('risk_flags', 'high_security')->count(),
+        'suspicious_docs' => \App\Models\Cases::whereJsonContains('risk_flags', 'suspicious_docs')->count(),
+        'unusual_routing' => \App\Models\Cases::whereJsonContains('risk_flags', 'unusual_routing')->count(),
+        'new_declarant' => \App\Models\Cases::whereJsonContains('risk_flags', 'new_declarant')->count(),
+        'high_value' => \App\Models\Cases::whereJsonContains('risk_flags', 'high_value')->count(),
+        'VALUE_ANOMALY' => \App\Models\Cases::whereJsonContains('risk_flags', 'VALUE_ANOMALY')->count(),
+        'restricted_goods' => \App\Models\Cases::whereJsonContains('risk_flags', 'restricted_goods')->count(),
+    ];
+    
+    return view('analyst.risk-matrix', [
+        'riskFlagCounts' => $riskFlagCounts,
+        'allRiskFlags' => \App\Models\Cases::whereNotNull('risk_flags')
+            ->pluck('risk_flags')
+            ->flatten()
+            ->unique()
+            ->values()
+    ]);
+});
+
+// Performance Analysis - Fixed for SQLite
+Route::get('/analyst/performance', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    // Get inspection performance data
+    $inspections = \App\Models\Inspection::whereNotNull('completed_at')
+                    ->select('completed_at', 'result')
+                    ->orderBy('completed_at', 'desc')
+                    ->limit(30)
+                    ->get()
+                    ->groupBy(function($item) {
+                        return $item->completed_at->format('Y-m-d');
+                    })
+                    ->map(function($group) {
+                        return [
+                            'passed' => $group->where('result', 'passed')->count(),
+                            'failed' => $group->where('result', 'failed')->count(),
+                            'hold' => $group->where('result', 'hold')->count(),
+                            'total' => $group->count()
+                        ];
+                    });
+    
+    // Inspector performance - SQLite compatible
+    $inspectorPerformance = \App\Models\Inspection::whereNotNull('completed_at')
+                             ->select('assigned_to')
+                             ->get()
+                             ->groupBy('assigned_to')
+                             ->map(function($group, $inspector) {
+                                 $total = $group->count();
+                                 $passed = $group->where('result', 'passed')->count();
+                                 
+                                 // Calculate average time for this inspector
+                                 $times = $group->filter(function($item) {
+                                     return $item->started_at && $item->completed_at;
+                                 })->map(function($item) {
+                                     return $item->started_at->diffInMinutes($item->completed_at);
+                                 });
+                                 
+                                 $avgTime = $times->isNotEmpty() ? round($times->avg()) : 0;
+                                 
+                                 return [
+                                     'total' => $total,
+                                     'passed' => $passed,
+                                     'pass_rate' => $total > 0 ? round(($passed / $total) * 100, 1) : 0,
+                                     'avg_time' => $avgTime
+                                 ];
+                             });
+    
+    return view('analyst.performance', [
+        'inspections' => $inspections,
+        'inspectorPerformance' => $inspectorPerformance
+    ]);
+});
+
+// Data Export (simplified)
+Route::get('/analyst/export', function () {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    // Return JSON data for export
+    $data = [
+        'cases' => \App\Models\Cases::with(['vehicle', 'declarant'])->limit(100)->get(),
+        'inspections' => \App\Models\Inspection::with('case')->limit(100)->get(),
+        'exported_at' => now()->toDateTimeString()
+    ];
+    
+    return response()->json($data);
+});
+
+// Risk Analysis Page
+Route::get('/analyst/risk-analysis', function () {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    $cases = \App\Models\Cases::with(['vehicle', 'inspections'])->get();
+    
+    // Count risk levels from risk_flags JSON
+    $riskLevels = [
+        'high' => 0,
+        'medium' => 0,
+        'low' => 0,
+        'none' => 0
+    ];
+    
+    foreach ($cases as $case) {
+        if ($case->risk_flags) {
+            if (in_array('high', $case->risk_flags)) {
+                $riskLevels['high']++;
+            } elseif (in_array('medium', $case->risk_flags)) {
+                $riskLevels['medium']++;
+            } elseif (in_array('low', $case->risk_flags)) {
+                $riskLevels['low']++;
+            } else {
+                $riskLevels['none']++;
+            }
+        } else {
+            $riskLevels['none']++;
+        }
+    }
+    
+    // Count common flags
+    $flagCounts = [];
+    foreach ($cases as $case) {
+        if ($case->risk_flags) {
+            foreach ($case->risk_flags as $flag) {
+                $flagCounts[$flag] = ($flagCounts[$flag] ?? 0) + 1;
+            }
+        }
+    }
+    arsort($flagCounts);
+    
+    $riskAnalysis = [
+        'by_level' => $riskLevels,
+        'by_status' => $cases->groupBy('status')->map->count(),
+        'common_flags' => array_slice($flagCounts, 0, 10, true),
+        'high_risk_cases' => $cases->filter(function($case) {
+            return $case->risk_flags && in_array('high', $case->risk_flags);
+        })->take(10)
+    ];
+    
+    return view('analyst.risk-analysis', [
+        'analysis' => $riskAnalysis,
+        'total_cases' => $cases->count()
+    ]);
+});
+
+// REPLACE this route (around line ~815-835):
+Route::get('/analyst/risk-matrix', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    // Calculate risk statistics
+    $highRisk = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'high_financial')
+              ->orWhereJsonContains('risk_flags', 'high_security')
+              ->orWhereJsonContains('risk_flags', 'high_value')
+              ->orWhereJsonContains('risk_flags', 'restricted_goods');
+    })->count();
+    
+    $mediumRisk = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'suspicious_docs')
+              ->orWhereJsonContains('risk_flags', 'unusual_routing')
+              ->orWhereJsonContains('risk_flags', 'new_declarant')
+              ->orWhereJsonContains('risk_flags', 'VALUE_ANOMALY');
+    })->count();
+    
+    $lowRisk = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'routine')
+              ->orWhereJsonContains('risk_flags', 'compliance');
+    })->count();
+    
+    // Get paginated cases with risk flags
+    $cases = \App\Models\Cases::whereNotNull('risk_flags')
+        ->with(['vehicle', 'declarant'])
+        ->orderBy('created_at', 'desc')
+        ->paginate(20); // 20 per page
+    
+    $stats = [
+        'high_risk' => $highRisk,
+        'medium_risk' => $mediumRisk,
+        'low_risk' => $lowRisk,
+        'total_cases' => \App\Models\Cases::count()
+    ];
+    
+    return view('analyst.risk-matrix', [
+        'stats' => $stats,
+        'cases' => $cases
+    ]);
+});
+
+Route::get('/analyst/risk-matrix', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    // Calculate risk statistics
+    $totalCases = \App\Models\Cases::count();
+    
+    // Cases with risk flags
+    $casesWithFlags = \App\Models\Cases::whereNotNull('risk_flags')
+        ->where('risk_flags', '!=', '[]')
+        ->count();
+    
+    // Risk level counts
+    $highRisk = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'high_financial')
+              ->orWhereJsonContains('risk_flags', 'high_security')
+              ->orWhereJsonContains('risk_flags', 'high_value')
+              ->orWhereJsonContains('risk_flags', 'restricted_goods');
+    })->count();
+    
+    $mediumRisk = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'suspicious_docs')
+              ->orWhereJsonContains('risk_flags', 'unusual_routing')
+              ->orWhereJsonContains('risk_flags', 'new_declarant')
+              ->orWhereJsonContains('risk_flags', 'VALUE_ANOMALY');
+    })->count();
+    
+    $lowRisk = \App\Models\Cases::where(function($query) {
+        $query->whereJsonContains('risk_flags', 'routine')
+              ->orWhereJsonContains('risk_flags', 'compliance');
+    })->count();
+    
+    // Get paginated cases with risk flags
+    $cases = \App\Models\Cases::whereNotNull('risk_flags')
+        ->where('risk_flags', '!=', '[]')
+        ->with(['vehicle', 'declarant'])
+        ->orderBy('created_at', 'desc')
+        ->paginate(15);
+    
+    // Prepare stats array
+    $stats = [
+        'high_risk' => $highRisk,
+        'medium_risk' => $mediumRisk,
+        'low_risk' => $lowRisk,
+        'total_cases' => $totalCases,
+        'with_flags' => $casesWithFlags,
+        'without_flags' => $totalCases - $casesWithFlags
+    ];
+    
+    return view('analyst.risk-matrix', [
+        'stats' => $stats,
+        'cases' => $cases,
+        'totalCases' => $totalCases
+    ]);
+});
+
+// AJAX search endpoint for Select2
+Route::get('/analyst/search-cases', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return response()->json([]);
+    }
+    
+    $search = $request->get('q', '');
+    $page = $request->get('page', 1);
+    $perPage = 10;
+    
+    $query = \App\Models\Cases::with(['vehicle', 'declarant']);
+    
+    if ($search) {
+        $query->where(function($q) use ($search) {
+            $q->where('id', 'like', "%{$search}%")
+              ->orWhereHas('vehicle', function($q) use ($search) {
+                  $q->where('plate_no', 'like', "%{$search}%");
+              })
+              ->orWhereHas('declarant', function($q) use ($search) {
+                  $q->where('name', 'like', "%{$search}%");
+              });
+        });
+    }
+    
+    $cases = $query->orderBy('id')
+        ->skip(($page - 1) * $perPage)
+        ->take($perPage + 1) // Get one extra to check if there are more
+        ->get();
+    
+    $hasMore = $cases->count() > $perPage;
+    if ($hasMore) {
+        $cases = $cases->take($perPage);
+    }
+    
+    $formatted = $cases->map(function($case) {
+        return [
+            'id' => $case->id,
+            'text' => $case->id,
+            'vehicle_plate' => $case->vehicle->plate_no ?? null,
+            'declarant_name' => $case->declarant->name ?? null
+        ];
+    });
+    
+    return response()->json([
+        'items' => $formatted,
+        'more' => $hasMore
+    ]);
+});
+
+Route::get('/analyst/performance', function () {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    return view('analyst.performance');
+});
+
+Route::post('/analyst/update-risk-flags', function (Request $request) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    $case = \App\Models\Cases::find($request->case_id);
+    if ($case) {
+        $case->risk_flags = $request->risk_flags ?? [];
+        $case->save();
+        
+        return back()->with('success', 'Risk flags updated for case ' . $case->id);
+    }
+    
+    return back()->with('error', 'Case not found');
+});
+
+Route::get('/analyst/case/{id}/risk', function ($id) {
+    if (!session('user_email') || session('user_role') !== 'analyst') {
+        return redirect('/login-demo');
+    }
+    
+    $case = \App\Models\Cases::with(['vehicle', 'declarant'])->findOrFail($id);
+    
+    return view('analyst.case-risk', ['case' => $case]);
 });
 
 // Add a debug route
